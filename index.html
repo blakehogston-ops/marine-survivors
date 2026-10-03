@@ -10,7 +10,9 @@
 <style>
 html,body{margin:0;height:100%;background:#0c170e;overflow:hidden;font-family:"Courier New",Courier,monospace;color:#f1ecd0;touch-action:none;user-select:none;-webkit-user-select:none}
 canvas#c{position:fixed;left:0;top:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}
-.overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(7,15,9,.8);text-align:center;padding:16px;box-sizing:border-box;overflow:auto;z-index:5}
+.overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;justify-content:flex-start;flex-direction:column;background:rgba(7,15,9,.8);text-align:center;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));box-sizing:border-box;overflow-y:auto;overflow-x:hidden;z-index:5;touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.overlay>:first-child{margin-top:auto}.overlay>:last-child{margin-bottom:auto}
+button{touch-action:manipulation}.overlay *{touch-action:pan-y}.overlay button,.overlay input,.overlay label{touch-action:manipulation}
 .overlay.show{display:flex}
 h1{font-family:Impact,"Arial Black",sans-serif;font-size:clamp(34px,8vw,76px);letter-spacing:.08em;margin:0;color:#e8dfae;text-shadow:3px 3px 0 #2c4a22,6px 6px 0 #0a120b;line-height:1}
 h1 span{color:#c9a13a}
@@ -42,11 +44,15 @@ button.btn.alt{background:#6b5a2f;font-size:clamp(14px,3vw,20px);padding:8px 22p
 .card .key{font-size:11px;color:#7f8f66}
 #stats{font-size:clamp(14px,3vw,20px);line-height:1.8;margin:8px 0 14px;color:#e8dfae}
 #stats b{color:#e8c860}
-#topbtns{position:fixed;right:8px;top:34px;display:none;gap:6px;z-index:4}
+#topbtns{position:fixed;right:calc(8px + env(safe-area-inset-right,0px));top:34px;display:none;gap:6px;z-index:4}
 #topbtns button{width:40px;height:34px;font-size:16px;font-family:inherit;background:rgba(20,34,16,.8);color:#f1ecd0;border:2px solid #4a6b2f;border-radius:4px;cursor:pointer}
 #topbtns button:hover{background:#3a5a28}
 #fsHint{position:fixed;left:50%;top:80px;transform:translateX(-50%);max-width:86vw;padding:8px 12px;background:rgba(10,14,10,.92);border:2px solid #ffd54a;border-radius:6px;color:#f1ecd0;font-size:13px;line-height:1.35;text-align:center;z-index:12;display:none}
 #fsHint.show{display:block}
+
+@media (pointer:coarse){#topbtns{gap:8px}#topbtns button{width:46px;height:44px;font-size:19px;border-radius:8px}.card .key{display:none}button.btn{min-height:48px}}
+@media (max-width:560px){#cards{flex-direction:column;flex-wrap:nowrap;align-items:center;gap:8px;width:100%}.card{width:100%;max-width:380px;min-height:0;padding:8px 10px;gap:3px}.card .nm{font-size:18px}.card canvas{width:44px;height:44px}.card .ds{font-size:12px}h1{font-size:clamp(30px,11vw,52px)}.help{font-size:12px;padding:8px 10px}#fsHint{top:100px}}
+@media (max-height:480px) and (orientation:landscape){#cards{gap:8px;flex-wrap:nowrap}.card{width:min(230px,30vw);min-height:0;padding:6px 8px;gap:2px}.card canvas{width:40px;height:40px}.card .nm{font-size:16px}.card .ds{font-size:11px;line-height:1.25}h1{font-size:clamp(26px,7vh,44px)}h2{font-size:clamp(22px,6vh,36px);margin-bottom:4px}.sub{margin:4px 0 10px}.help{margin-top:8px;font-size:11px;line-height:1.35}button.btn{padding:8px 26px;font-size:20px}#stats{line-height:1.4;margin:4px 0 8px}}
 </style>
 </head>
 <body>
@@ -98,14 +104,23 @@ const cv=document.getElementById('c'), ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const DBG={t:+params.get('t')||0, god:params.has('god'), bot:params.has('bot'), nodemo:params.has('nodemo')};
-let W=800,H=600,zoom=1,VW=800,VH=600,UI=1;
+let W=800,H=600,zoom=1,VW=800,VH=600,UI=1,DPR=1,SA={t:0,r:0,b:0,l:0},PY=70;
+const COARSE=matchMedia('(pointer:coarse)');
+const SAEL=document.createElement('div'); SAEL.style.cssText='position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)'; document.documentElement.appendChild(SAEL);
 function resize(){
   const dpr=Math.min(window.devicePixelRatio||1,1.5);
   W=cv.width=Math.max(320,Math.floor(innerWidth*dpr)); H=cv.height=Math.max(240,Math.floor(innerHeight*dpr));
   zoom=Math.max(.5,Math.min(1.7,Math.min(W,H)/700)); VW=W/zoom; VH=H/zoom;
-  UI=Math.max(.8,Math.min(2.2,Math.min(W,H)/620));
+  UI=Math.max(.8,Math.min(2.2,Math.min(W,H)/620)); DPR=W/innerWidth;
+  { const cs=getComputedStyle(SAEL); SA={t:parseFloat(cs.paddingTop)||0,r:parseFloat(cs.paddingRight)||0,b:parseFloat(cs.paddingBottom)||0,l:parseFloat(cs.paddingLeft)||0} }
+  const tb=document.getElementById('topbtns'); if(tb){ tb.style.top=Math.round(SA.t+22*UI/DPR+4)+'px' }
+  PY=Math.max(70*UI,(SA.t+22*UI/DPR+4+(COARSE.matches?44:34)+6)*DPR);
 }
-window.addEventListener('resize',resize); resize();
+window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>{ setTimeout(resize,120); setTimeout(resize,500) });
+if(window.visualViewport)visualViewport.addEventListener('resize',resize);
+['gesturestart','gesturechange','gestureend','contextmenu','dblclick'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+document.addEventListener('touchmove',e=>{ if(!e.target.closest||!e.target.closest('.overlay'))e.preventDefault() },{passive:false});
+resize();
 const TAU=Math.PI*2, rnd=Math.random;
 const fmt=t=>{t=Math.max(0,Math.floor(t));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
 function hash2(x,y){let h=(Math.imul(x,374761393)+Math.imul(y,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296}
@@ -688,19 +703,20 @@ function render(){
   if(state==='menu'||g.demo)return;
   const U=UI;
   // xp bar
-  ctx.fillStyle='#0b140c'; ctx.fillRect(0,0,W,22*U); ctx.fillStyle='#3a8fd8'; ctx.fillRect(0,0,W*p.xp/p.need,22*U); ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(0,0,W*p.xp/p.need,7*U);
-  txt('LV '+p.lvl,W/2,17*U,14*U,'#fff','center');
+  const oy=SA.t*DPR, ox=SA.l*DPR, orr=SA.r*DPR, ob=SA.b*DPR;
+  ctx.fillStyle='#0b140c'; ctx.fillRect(0,0,W,22*U+oy); ctx.fillStyle='#3a8fd8'; ctx.fillRect(0,oy,W*p.xp/p.need,22*U); ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(0,oy,W*p.xp/p.need,7*U);
+  txt('LV '+p.lvl,W/2,17*U+oy,14*U,'#fff','center');
   // hp
-  const bx=12*U,by=32*U,bw=220*U,bh=20*U; ctx.fillStyle='#0b140c'; ctx.fillRect(bx-3,by-3,bw+6,bh+6); ctx.fillStyle='#4a1713'; ctx.fillRect(bx,by,bw,bh); ctx.fillStyle=p.hp/p.maxHp>.3?'#47b84a':'#e64a3a'; ctx.fillRect(bx,by,bw*Math.max(0,p.hp)/p.maxHp,bh);
+  const bx=12*U+ox,by=32*U+oy,bw=Math.min(220*U,W*.34),bh=20*U; ctx.fillStyle='#0b140c'; ctx.fillRect(bx-3,by-3,bw+6,bh+6); ctx.fillStyle='#4a1713'; ctx.fillRect(bx,by,bw,bh); ctx.fillStyle=p.hp/p.maxHp>.3?'#47b84a':'#e64a3a'; ctx.fillRect(bx,by,bw*Math.max(0,p.hp)/p.maxHp,bh);
   ctx.fillStyle='rgba(255,255,255,.2)'; ctx.fillRect(bx,by,bw*Math.max(0,p.hp)/p.maxHp,bh*.35); txt(`HP ${Math.ceil(p.hp)}/${p.maxHp}`,bx+bw/2,by+bh-4*U,13*U,'#fff','center');
   // timer / kills
-  txt(fmt(g.t),W/2,56*U,28*U,'#f6f0cc','center');
-  txt('KILLS '+g.kills,W-100*U,50*U,16*U,'#f0e6a8','right');
+  txt(fmt(g.t),W/2,56*U+oy,28*U,'#f6f0cc','center');
+  txt('KILLS '+g.kills,bx,by+bh+17*U,15*U,'#f0e6a8','left');
   // boss bar
-  if(g.boss&&!g.boss.dead){ const bw2=Math.min(460*U,W*.6),bx2=W/2-bw2/2,by2=70*U; ctx.fillStyle='#0b140c'; ctx.fillRect(bx2-3,by2-3,bw2+6,16*U+6); ctx.fillStyle='#3a1210'; ctx.fillRect(bx2,by2,bw2,16*U); ctx.fillStyle='#d83a2a'; ctx.fillRect(bx2,by2,bw2*Math.max(0,g.boss.hp/g.boss.mhp),16*U); txt('BANZAI COMMANDER',W/2,by2+13*U,12*U,'#fff','center') }
+  if(g.boss&&!g.boss.dead){ const bw2=Math.min(460*U,W*.6),bx2=W/2-bw2/2,by2=PY; ctx.fillStyle='#0b140c'; ctx.fillRect(bx2-3,by2-3,bw2+6,16*U+6); ctx.fillStyle='#3a1210'; ctx.fillRect(bx2,by2,bw2,16*U); ctx.fillStyle='#d83a2a'; ctx.fillRect(bx2,by2,bw2*Math.max(0,g.boss.hp/g.boss.mhp),16*U); txt('BANZAI COMMANDER',W/2,by2+13*U,12*U,'#fff','center') }
   // weapons list
-  let ix=12*U,iy=H-44*U; const sz=30*U;
-  const row=(id,l)=>{ ctx.fillStyle='rgba(10,20,12,.7)'; ctx.fillRect(ix-2,iy-2,sz+4,sz+4+8*U); ctx.save(); ctx.translate(ix,iy); drawIcon(ctx,id,sz); ctx.restore(); txt('L'+l,ix+sz/2,iy+sz+9*U,10*U,'#e8c860','center'); ix+=sz+8*U };
+  const sz=30*U; let ix=12*U+ox,iy=H-44*U-ob; const ixMax=W-orr-60*DPR;
+  const row=(id,l)=>{ ctx.fillStyle='rgba(10,20,12,.7)'; if(ix+sz>ixMax&&ix>12*U+ox+sz){ ix=12*U+ox; iy-=sz+16*U } ctx.fillRect(ix-2,iy-2,sz+4,sz+4+8*U); ctx.save(); ctx.translate(ix,iy); drawIcon(ctx,id,sz); ctx.restore(); txt('L'+l,ix+sz/2,iy+sz+9*U,10*U,'#e8c860','center'); ix+=sz+8*U };
   for(const id in g.w)row(id,g.w[id].lvl); for(const id in g.ps)if(g.ps[id]>0)row(id,g.ps[id]);
   // banner
   if(g.banner){ const b=g.banner,k=Math.min(1,(3.2-b.t)*5,b.t*2); ctx.globalAlpha=Math.max(0,Math.min(1,k)); txt(b.text,W/2,H*.27,(30+6*(1-Math.min(1,k)))*U,b.col,'center'); ctx.globalAlpha=1 }
