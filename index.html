@@ -23,6 +23,15 @@ button.btn.alt{background:#6b5a2f;font-size:clamp(14px,3vw,20px);padding:8px 22p
 .help{max-width:560px;font-size:clamp(11px,2.4vw,14px);line-height:1.6;color:#d4d8b5;margin-top:18px;background:rgba(0,0,0,.28);padding:10px 16px;border:1px solid #3a4f2c;border-radius:4px}
 .help b{color:#e8c860}
 .foot{margin-top:14px;font-size:11px;color:#8a9770;letter-spacing:.1em}
+.goresw{display:inline-flex;align-items:center;gap:10px;margin-top:14px;padding:6px 14px;background:rgba(0,0,0,.4);border:2px solid #8a2a22;border-radius:22px;cursor:pointer;font-family:Impact,"Arial Black",sans-serif;letter-spacing:.12em;color:#f1ecd0;font-size:clamp(14px,3vw,18px);user-select:none}
+.goresw input{position:absolute;opacity:0;pointer-events:none}
+.goresw i{position:relative;width:52px;height:26px;border-radius:13px;background:#4a4a46;border:2px solid #222;transition:background .15s}
+.goresw i:after{content:"";position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#e8e4cf;transition:left .15s}
+.goresw input:checked+i{background:#b3261e}
+.goresw input:checked+i:after{left:28px}
+.goresw input:focus-visible+i{outline:2px solid #ffd54a}
+.goresw b{min-width:34px;text-align:left;color:#ff8a7a}
+.goresw.off b{color:#9aa}
 #cards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:900px}
 .card{width:230px;min-height:170px;background:#1c2d17;border:3px solid #6f8f44;border-radius:6px;padding:12px 10px;color:#f1ecd0;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 6px 0 #0a120b}
 .card:hover,.card:focus{background:#2c4423;border-color:#e8c860;outline:none;transform:translateY(-3px)}
@@ -50,6 +59,7 @@ button.btn.alt{background:#6b5a2f;font-size:clamp(14px,3vw,20px);padding:8px 22p
   <h1>MARINE <span>SURVIVORS</span></h1>
   <div class="sub">Pacific Island · Hold the line against the banzai charge</div>
   <button class="btn" id="btnStart">Start Mission</button>
+  <label class="goresw" id="goreSw" title="Blood, gibs and corpses. OFF = enemies just poof into dust."><span>GORE</span><input type="checkbox" id="goreChk" checked><i></i><b id="goreTxt">ON</b></label>
   <div class="help">
     <b>Move:</b> WASD / Arrow keys (touch: drag anywhere)<br>
     <b>Weapons fire automatically.</b> Collect XP gems, level up, pick upgrades.<br>
@@ -217,11 +227,15 @@ function buildGore(){
 }
 const BLOODC=['#d01818','#a00f10','#ff3030','#7a0a0c'];
 const DECAL_CAP=700;
-function addDecal(x,y,c,life,sc){ const d={x,y,c,l:life,sc:sc||1}; if(decals.length<DECAL_CAP)decals.push(d); else {decals[decalI]=d; decalI=(decalI+1)%DECAL_CAP;} }
-function spawnDrops(x,y,dx,dy,n,spd){ if(drops.length>360)return; const L=Math.hypot(dx,dy), dir=L>.5, base=Math.atan2(dy,dx);
+let GORE=true; try{GORE=localStorage.getItem('ms_gore')!=='0'}catch(e){}
+function setGore(v,silent){ GORE=!!v; try{localStorage.setItem('ms_gore',GORE?'1':'0')}catch(e){}
+  const c=document.getElementById('goreChk'),t=document.getElementById('goreTxt'),w=document.getElementById('goreSw'); if(c)c.checked=GORE; if(t)t.textContent=GORE?'ON':'OFF'; if(w)w.classList.toggle('off',!GORE);
+  if(!silent&&window.onGoreChange)window.onGoreChange(GORE) }
+function addDecal(x,y,c,life,sc){ if(!GORE)return; const d={x,y,c,l:life,sc:sc||1}; if(decals.length<DECAL_CAP)decals.push(d); else {decals[decalI]=d; decalI=(decalI+1)%DECAL_CAP;} }
+function spawnDrops(x,y,dx,dy,n,spd){ if(!GORE||drops.length>360)return; const L=Math.hypot(dx,dy), dir=L>.5, base=Math.atan2(dy,dx);
   for(let i=0;i<n;i++){ const a=dir?base+(rnd()-.5)*1.5:rnd()*TAU, v=spd*(.3+rnd()*.9); const l=.3+rnd()*.35;
     drops.push({x:x+(rnd()-.5)*6,y:y+(rnd()-.5)*6,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l,ml:l,s:2+((rnd()*3)|0),c:BLOODC[(rnd()*4)|0]}) } }
-function spawnGib(x,y,vx,vy,k,sc){ if(gibs.length>=200)return; gibs.push({x,y,z:4+rnd()*10,vx,vy,vz:130+rnd()*230,k,sc:sc||1,rot:rnd()*TAU,vr:(rnd()-.5)*18,b:0}) }
+function spawnGib(x,y,vx,vy,k,sc){ if(!GORE||gibs.length>=200)return; gibs.push({x,y,z:4+rnd()*10,vx,vy,vz:130+rnd()*230,k,sc:sc||1,rot:rnd()*TAU,vr:(rnd()-.5)*18,b:0}) }
 function goreKill(e){
   const x=e.x,y=e.y, src=dmgSrc, big=e.boss, ex=src>=2;
   let dx=e.kx,dy=e.ky; const kl=Math.hypot(dx,dy), st=Math.min(1,kl/180);
@@ -382,7 +396,7 @@ function hurtEnemy(e,d,kx,ky){ if(e.dead)return; e.hp-=d; e.flash=.09;
   if(e.hp<=0)killEnemy(e); else Snd.play('hit'); }
 function dropGem(x,y,v,type){ if(gems.length>420){addXp(v);return} gems.push({x:x+(rnd()-.5)*10,y:y+(rnd()-.5)*10,v,t:type,pull:false,sp:0}) }
 function killEnemy(e){ e.dead=true; G.kills++;
-  const x=e.x,y=e.y; goreKill(e);
+  const x=e.x,y=e.y; goreKill(e); if(!GORE)burst(x,y,e.boss?20:6,e.boss?140:80,.4,e.boss?5:3,['#d8d0b0','#9a9a8a','#bdb596'],false);
   Snd.play(e.boss?'boom':'kill');
   if(e.boss){ G.shake=Math.max(G.shake,22); G.boss=null; G.banner={text:'COMMANDER DEFEATED!',t:3,col:'#9be37a'};
     for(let i=0;i<10;i++)dropGem(x,y,8,2); dropGem(x,y,0,3);dropGem(x,y,0,3); }
@@ -570,6 +584,7 @@ function gameOver(){ state='over'; overAt=performance.now(); Snd.play('over'); c
 function showBest(){ let b=0; try{b=+localStorage.getItem('ms_best')||0}catch(e){} $('best').textContent=b?('Best survival: '+fmt(b)):''; }
 $('btnStart').onclick=startGame; $('btnRestart').onclick=startGame; $('btnMenu').onclick=toMenu; $('btnResume').onclick=resumeGame; $('btnQuit').onclick=toMenu; $('btnPause').onclick=()=>{state==='play'?pauseGame():resumeGame()};
 $('btnMute').onclick=()=>{Snd.init();Snd.resume();Snd.setMuted(!Snd.muted)};
+{ const gc=document.getElementById('goreChk'); setGore(GORE,true); gc.addEventListener('change',e=>{ setGore(e.target.checked); e.target.blur() }); gc.addEventListener('keydown',e=>{ e.stopPropagation() }); }
 
 /* ---- fullscreen toggle (button + F key); Fullscreen API with webkit fallback; iOS Safari hint ---- */
 (function(){ const de=document.documentElement, btn=$('btnFull'), hint=$('fsHint');
@@ -668,7 +683,7 @@ function render(){
   if(p.hp<p.maxHp){ ctx.fillStyle='#000a'; ctx.fillRect(p.x-16,p.y+20,32,5); ctx.fillStyle=p.hp/p.maxHp>.3?'#5bd05b':'#e64a3a'; ctx.fillRect(p.x-15,p.y+21,30*p.hp/p.maxHp,3) }
   // ---- screen space HUD ----
   ctx.setTransform(1,0,0,1,0,0);
-  { const low=(!g.demo&&p.hp>0&&p.hp/p.maxHp<.35)?(.16+.1*Math.sin(tt*5))*(1-p.hp/p.maxHp/.35*.5):0; const a=Math.min(.8,Math.max(g.hurt>0?g.hurt*1.5:0,low));
+  { const low=(!g.demo&&p.hp>0&&p.hp/p.maxHp<.35)?(.16+.1*Math.sin(tt*5))*(1-p.hp/p.maxHp/.35*.5):0; const a=Math.min(.8,Math.max(g.hurt>0?g.hurt*1.5:0,low))*(GORE?1:.35);
     if(a>.01){ const gr=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.18,W/2,H/2,Math.max(W,H)*.68); gr.addColorStop(0,'rgba(120,0,0,0)'); gr.addColorStop(.6,`rgba(140,6,6,${a*.45})`); gr.addColorStop(1,`rgba(110,0,0,${a})`); ctx.fillStyle=gr; ctx.fillRect(0,0,W,H) } }
   if(state==='menu'||g.demo)return;
   const U=UI;
@@ -705,7 +720,7 @@ buildSprites(); buildGore(); buildWorldArt(); Snd.setMuted(Snd.muted);
 if(DBG.nodemo){ G=null; newGame(false); } else newGame(true);
 showBest();
 if(DBG.t>0||DBG.bot||params.has('autostart'))startGame();
-window.__ms={get drops(){return drops},get gibs(){return gibs},get decals(){return decals},SPR,get state(){return state},get G(){return G},get enemies(){return enemies},perf,startGame,keys,pick:pickChoice,get choices(){return choices}};
+window.__ms={spawnEnemy,get drops(){return drops},get gibs(){return gibs},get decals(){return decals},SPR,get state(){return state},get G(){return G},get enemies(){return enemies},perf,startGame,keys,pick:pickChoice,get choices(){return choices}};
 requestAnimationFrame(frame);
 
 /* audio unlock for mobile browsers (iOS needs a gesture + playback audio session) */
